@@ -1,0 +1,160 @@
+/* ── Reset & Base ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0f1117;
+  --surface:   #1a1d27;
+  --border:    #2c2f3e;
+  --accent:    #6c63ff;
+  --accent-h:  #574fd6;
+  --text:      #e8e9f0;
+  --muted:     #7b7e96;
+  --danger:    #e05252;
+  --success:   #3ecf8e;
+  --radius:    10px;
+  --font:      'Inter', system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+/* ── Card ───────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* ── Logo mark ──────────────────────────────────────────────────────── */
+.logo {
+  width: 44px;
+  height: 44px;
+  background: var(--accent);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.4rem;
+  font-size: 1.3rem;
+}
+
+/* ── Headings ───────────────────────────────────────────────────────── */
+h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.02em;
+  margin-bottom: .35rem;
+}
+
+.subtitle {
+  text-align: center;
+  color: var(--muted);
+  font-size: .875rem;
+  margin-bottom: 1.8rem;
+}
+
+/* ── Form ───────────────────────────────────────────────────────────── */
+.field {
+  margin-bottom: 1rem;
+}
+
+label {
+  display: block;
+  font-size: .8125rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: .4rem;
+  letter-spacing: .02em;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .7rem 1rem;
+  color: var(--text);
+  font-size: .9375rem;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color .15s;
+}
+
+input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(108,99,255,.18);
+}
+
+/* ── Button ─────────────────────────────────────────────────────────── */
+.btn {
+  display: block;
+  width: 100%;
+  padding: .75rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: .9375rem;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  margin-top: 1.4rem;
+  transition: background .15s, transform .1s;
+}
+
+.btn:hover  { background: var(--accent-h); }
+.btn:active { transform: scale(.98); }
+
+/* ── Alert messages ─────────────────────────────────────────────────── */
+.alert {
+  border-radius: var(--radius);
+  padding: .7rem 1rem;
+  font-size: .875rem;
+  margin-bottom: 1.1rem;
+}
+
+.alert-error   { background: rgba(224,82,82,.12);  border: 1px solid rgba(224,82,82,.35);  color: #f88; }
+.alert-success { background: rgba(62,207,142,.10); border: 1px solid rgba(62,207,142,.3);  color: #5de0a8; }
+
+/* ── Footer links ───────────────────────────────────────────────────── */
+.links {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: .875rem;
+  color: var(--muted);
+}
+
+.links a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.links a:hover { text-decoration: underline; }
+
+.divider {
+  display: inline-block;
+  margin: 0 .5rem;
+  color: var(--border);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 460px) {
+  .card { padding: 2rem 1.25rem; }
+}

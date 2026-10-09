@@ -1,0 +1,516 @@
+<title>Rep Counter Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ── Tokens ─────────────────────────────────────────────────────────
+   Layout: full-width data tables, toolbar with search + filters
+   Color:  slate base, electric green accent (matches the app)
+   Type:   Inter for UI, JetBrains Mono for values/angles
+──────────────────────────────────────────────────────────────────── */
+:root {
+  --bg:         #f5f7fa;
+  --surface:    #ffffff;
+  --raised:     #eef1f7;
+  --border:     #dde3ef;
+  --border-hi:  #c4ccdb;
+  --accent:     #1a7a45;
+  --accent-lt:  #e8f5ee;
+  --accent-text:#155c35;
+  --warn:       #b45309;
+  --warn-lt:    #fef3c7;
+  --danger:     #b91c1c;
+  --danger-lt:  #fee2e2;
+  --info:       #1d4ed8;
+  --info-lt:    #eff6ff;
+  --fg:         #0d1520;
+  --fg2:        #374151;
+  --muted:      #6b7280;
+  --mono:       'JetBrains Mono', 'Courier New', monospace;
+  --sans:       'Inter', system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:         #0d1117;
+    --surface:    #161b26;
+    --raised:     #1e2535;
+    --border:     #252f42;
+    --border-hi:  #344159;
+    --accent:     #22c55e;
+    --accent-lt:  #052e16;
+    --accent-text:#4ade80;
+    --warn:       #fbbf24;
+    --warn-lt:    #1c1208;
+    --danger:     #f87171;
+    --danger-lt:  #2a1215;
+    --info:       #60a5fa;
+    --info-lt:    #0c1a3a;
+    --fg:         #e8f0fe;
+    --fg2:        #9ca3af;
+    --muted:      #6b7280;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:         #0d1117;
+  --surface:    #161b26;
+  --raised:     #1e2535;
+  --border:     #252f42;
+  --border-hi:  #344159;
+  --accent:     #22c55e;
+  --accent-lt:  #052e16;
+  --accent-text:#4ade80;
+  --warn:       #fbbf24;
+  --warn-lt:    #1c1208;
+  --danger:     #f87171;
+  --danger-lt:  #2a1215;
+  --info:       #60a5fa;
+  --info-lt:    #0c1a3a;
+  --fg:         #e8f0fe;
+  --fg2:        #9ca3af;
+  --muted:      #6b7280;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--fg);
+  padding-inline: 1rem;
+  padding-block: 1.5rem;
+}
+
+/* ── Page header ─────────────────────────────────────────────────── */
+.page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  flex-wrap: wrap; gap: .75rem;
+  margin-bottom: 1.25rem;
+}
+.page-title {
+  font-size: 1.25rem; font-weight: 700; letter-spacing: -.01em;
+}
+.page-sub { font-size: .85rem; color: var(--muted); margin-top: .2rem; }
+.badge {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .3rem .75rem; border-radius: 99px; font-size: .75rem;
+  font-weight: 600; letter-spacing: .02em;
+}
+.badge-green { background: var(--accent-lt); color: var(--accent-text); }
+
+/* ── Toolbar ─────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
+  margin-bottom: 1.25rem;
+}
+.search {
+  flex: 1 1 240px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: .6rem .8rem;
+  color: var(--fg); font: 500 .9rem var(--sans); outline: none;
+}
+.search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chip {
+  background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 99px; padding: .35rem .8rem; font: 600 .75rem var(--sans);
+  cursor: pointer; transition: all .15s;
+}
+.chip:hover { color: var(--fg); border-color: var(--border-hi); }
+.chip[aria-pressed="true"] { background: var(--accent-lt); color: var(--accent-text); border-color: var(--accent); }
+.btn-reset {
+  background: none; border: 1px solid var(--border-hi); color: var(--fg2);
+  border-radius: 10px; padding: .55rem .9rem; font: 600 .8rem var(--sans); cursor: pointer;
+}
+.btn-reset:hover { border-color: var(--accent); color: var(--accent); }
+.result-count { font-size: .78rem; color: var(--muted); margin-bottom: .75rem; }
+.empty-msg {
+  text-align: center; color: var(--muted); padding: 2rem 1rem; font-size: .9rem;
+  background: var(--surface); border: 1px dashed var(--border-hi); border-radius: 14px;
+  margin-bottom: 1.25rem;
+}
+
+/* ── Table wrapper ───────────────────────────────────────────────── */
+.tbl-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+}
+.tbl-title {
+  font-size: .7rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted);
+  padding: .75rem 1rem .5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+table {
+  width: 100%; border-collapse: collapse; min-width: 480px;
+}
+thead th {
+  background: var(--raised);
+  font-size: .72rem; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--muted);
+  padding: .6rem 1rem; text-align: left;
+  border-bottom: 1px solid var(--border-hi);
+  white-space: nowrap;
+}
+thead th:not(:first-child) { text-align: center; }
+
+tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--raised); }
+
+td {
+  padding: .65rem 1rem; font-size: .875rem; color: var(--fg2);
+  vertical-align: middle;
+}
+td:not(:first-child) { text-align: center; }
+
+.td-label {
+  font-weight: 600; color: var(--fg); display: flex;
+  align-items: center; gap: .5rem;
+}
+.ex-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.mono { font-family: var(--mono); font-size: .82rem; font-variant-numeric: tabular-nums; }
+.pill {
+  display: inline-block; padding: .2rem .6rem; border-radius: 6px;
+  font-size: .75rem; font-weight: 600; font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.pill-green { background: var(--accent-lt); color: var(--accent-text); }
+.pill-blue  { background: var(--info-lt);   color: var(--info); }
+.pill-warn  { background: var(--warn-lt);   color: var(--warn); }
+.sub { font-size: .72rem; color: var(--muted); }
+
+/* ── Editable thresholds ─────────────────────────────────────────── */
+.th-wrap { display: inline-flex; align-items: center; gap: .3rem; }
+.th-in {
+  width: 4.5rem; background: var(--raised); border: 1px solid var(--border);
+  border-radius: 8px; padding: .35rem .4rem; text-align: center;
+  color: var(--fg); font: 600 .85rem var(--mono); outline: none;
+  font-variant-numeric: tabular-nums;
+}
+.th-in:focus { border-color: var(--accent); }
+.th-in.invalid { border-color: var(--danger); color: var(--danger); background: var(--danger-lt); }
+.unit { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+.warn-txt { font-size: .7rem; color: var(--danger); margin-top: .25rem; min-height: 0; }
+.warn-txt:empty { display: none; }
+
+/* ── Section divider row ─────────────────────────────────────────── */
+.section-row td {
+  background: var(--raised); font-size: .7rem; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  padding: .4rem 1rem; text-align: left !important;
+  border-top: 1px solid var(--border-hi);
+}
+
+/* ── Two-col layout for smaller tables ───────────────────────────── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+/* ── Footer note ─────────────────────────────────────────────────── */
+.note {
+  font-size: .78rem; color: var(--muted);
+  border-left: 3px solid var(--border-hi);
+  padding-left: .75rem; margin-top: 1.25rem; line-height: 1.5;
+}
+</style>
+
+<!-- ── Page header ──────────────────────────────────────────────── -->
+<div class="page-header">
+  <div>
+    <div class="page-title">AI Rep Counter — Reference Sheet</div>
+    <div class="page-sub">Exercise configs, angle thresholds, landmark indices &amp; counting logic</div>
+  </div>
+  <span class="badge badge-green">
+    <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="currentColor"/></svg>
+    <span id="ex-count">8 Exercises</span>
+  </span>
+</div>
+
+<!-- ── Toolbar: search + filters ────────────────────────────────── -->
+<div class="toolbar">
+  <input class="search" id="q" type="search" placeholder="Search exercises, joints, landmarks…" aria-label="Search rows">
+  <div class="chips" role="group" aria-label="Filter by section">
+    <button class="chip" data-cat="all" aria-pressed="true">All</button>
+    <button class="chip" data-cat="exercises" aria-pressed="false">Exercises</button>
+    <button class="chip" data-cat="logic" aria-pressed="false">Logic</button>
+    <button class="chip" data-cat="landmarks" aria-pressed="false">Landmarks</button>
+    <button class="chip" data-cat="model" aria-pressed="false">Model</button>
+    <button class="chip" data-cat="formula" aria-pressed="false">Formula</button>
+  </div>
+  <button class="btn-reset" id="reset-btn">Reset thresholds</button>
+</div>
+<div class="result-count" id="result-count" aria-live="polite"></div>
+<div class="empty-msg" id="empty-msg" hidden>No rows match your search.</div>
+
+<!-- ── Exercise Configs (editable thresholds) ───────────────────── -->
+<div class="tbl-wrap" data-cat="exercises">
+  <div class="tbl-title">Exercise Configuration &amp; Angle Thresholds (editable)</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Exercise</th>
+        <th>Muscle Group</th>
+        <th>Joint Tracked</th>
+        <th>Down Angle</th>
+        <th>Up Angle</th>
+        <th>Logic</th>
+        <th>Angle Label</th>
+      </tr>
+    </thead>
+    <tbody id="ex-body"></tbody>
+  </table>
+</div>
+
+<!-- ── Counting Logic + Landmark Index side-by-side ─────────────── -->
+<div class="grid2">
+
+  <!-- Counting Logic -->
+  <div class="tbl-wrap" data-cat="logic">
+    <div class="tbl-title">Rep Counting Logic</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Phase</th>
+          <th>Condition (Normal)</th>
+          <th>Condition (Inverted)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><div class="td-label">↓ Down</div></td>
+          <td><span class="mono">angle &lt; downAngle</span><br><span class="sub">while phase = up</span></td>
+          <td><span class="mono">angle &gt; downAngle</span><br><span class="sub">while phase = up</span></td>
+        </tr>
+        <tr>
+          <td><div class="td-label">↑ Up (rep+1)</div></td>
+          <td><span class="mono">angle &gt; upAngle</span><br><span class="sub">while phase = down</span></td>
+          <td><span class="mono">angle &lt; upAngle</span><br><span class="sub">while phase = down</span></td>
+        </tr>
+        <tr>
+          <td><div class="td-label">Side selection</div></td>
+          <td colspan="2">Uses left side landmarks; falls back to right side if left visibility &lt; right</td>
+        </tr>
+        <tr>
+          <td><div class="td-label">Visibility gate</div></td>
+          <td colspan="2">All 3 landmarks must have confidence ≥ 0.4, else angle = null (no count)</td>
+        </tr>
+        <tr>
+          <td><div class="td-label">Threshold check</div></td>
+          <td colspan="2">Normal: down &lt; up. Inverted: down &gt; up. Pairs that break this rule are flagged above.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Landmark Indices -->
+  <div class="tbl-wrap" data-cat="landmarks">
+    <div class="tbl-title">MediaPipe Pose Landmark Indices</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Landmark</th>
+          <th>Left idx</th>
+          <th>Right idx</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="section-row"><td colspan="3">Upper Body</td></tr>
+        <tr><td>Shoulder</td><td><span class="pill pill-blue mono">11</span></td><td><span class="pill pill-blue mono">12</span></td></tr>
+        <tr><td>Elbow</td><td><span class="pill pill-blue mono">13</span></td><td><span class="pill pill-blue mono">14</span></td></tr>
+        <tr><td>Wrist</td><td><span class="pill pill-blue mono">15</span></td><td><span class="pill pill-blue mono">16</span></td></tr>
+        <tr class="section-row"><td colspan="3">Lower Body</td></tr>
+        <tr><td>Hip</td><td><span class="pill pill-blue mono">23</span></td><td><span class="pill pill-blue mono">24</span></td></tr>
+        <tr><td>Knee</td><td><span class="pill pill-blue mono">25</span></td><td><span class="pill pill-blue mono">26</span></td></tr>
+        <tr><td>Ankle</td><td><span class="pill pill-blue mono">27</span></td><td><span class="pill pill-blue mono">28</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ── MediaPipe Model Settings ─────────────────────────────────── -->
+<div class="tbl-wrap" data-cat="model">
+  <div class="tbl-title">MediaPipe Pose Model Settings</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Setting</th>
+        <th>Value</th>
+        <th>Effect</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>modelComplexity</td><td><span class="pill pill-green mono">1</span></td><td>Medium accuracy — good balance of speed vs. precision</td></tr>
+      <tr><td>smoothLandmarks</td><td><span class="pill pill-green mono">true</span></td><td>Reduces jitter between frames for stable angle readings</td></tr>
+      <tr><td>enableSegmentation</td><td><span class="pill pill-warn mono">false</span></td><td>Disabled — not needed, improves performance</td></tr>
+      <tr><td>minDetectionConfidence</td><td><span class="pill pill-blue mono">0.5</span></td><td>Minimum score to detect a person in the frame</td></tr>
+      <tr><td>minTrackingConfidence</td><td><span class="pill pill-blue mono">0.5</span></td><td>Minimum score to keep tracking across frames</td></tr>
+      <tr><td>Camera resolution</td><td><span class="mono">640 × 480</span></td><td>Input feed size sent to the pose model</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ── Angle formula ─────────────────────────────────────────────── -->
+<div class="tbl-wrap" data-cat="formula">
+  <div class="tbl-title">Angle Calculation Formula</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Step</th>
+        <th>Formula / Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1. Get vectors</td><td><span class="mono">A → B (joint center) → C</span> — three landmark (x, y) coords</td></tr>
+      <tr><td>2. atan2 difference</td><td><span class="mono">radians = atan2(C.y−B.y, C.x−B.x) − atan2(A.y−B.y, A.x−B.x)</span></td></tr>
+      <tr><td>3. To degrees</td><td><span class="mono">angle = |radians × 180 / π|</span></td></tr>
+      <tr><td>4. Normalize</td><td>If <span class="mono">angle &gt; 180°</span> → <span class="mono">angle = 360° − angle</span> (always 0–180 range)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="note">
+  All processing runs locally in the browser via MediaPipe Pose v0.5.1675469404. No video is uploaded or stored.
+  Angles are computed from normalized landmark coordinates (0–1 range) per frame at ~30 fps.
+  Threshold edits on this sheet are saved in this browser only and are a reference: they do not change the counter app's built-in values.
+</p>
+
+<script>
+// ── Exercise data (mirrors the counter app's EXERCISES config) ────────
+const EX = [
+  {id:'pushup',      name:'Push-Up',        color:'#22c55e', muscle:'Chest / Triceps', joint:'Shoulder → Elbow → Wrist', label:'Elbow angle', down:90,  up:155, inv:false},
+  {id:'squat',       name:'Squat',          color:'#60a5fa', muscle:'Quads / Glutes',  joint:'Hip → Knee → Ankle',       label:'Knee angle',  down:90,  up:160, inv:false},
+  {id:'curl',        name:'Bicep Curl',     color:'#f59e0b', muscle:'Biceps',          joint:'Shoulder → Elbow → Wrist', label:'Elbow angle', down:155, up:50,  inv:true },
+  {id:'pullup',      name:'Pull-Up',        color:'#a78bfa', muscle:'Lats / Biceps',   joint:'Shoulder → Elbow → Wrist', label:'Elbow angle', down:60,  up:150, inv:false},
+  {id:'ohp',         name:'Shoulder Press', color:'#f472b6', muscle:'Shoulders / Triceps', joint:'Shoulder → Elbow → Wrist', label:'Elbow angle', down:90, up:160, inv:false},
+  {id:'lunge',       name:'Lunge',          color:'#38bdf8', muscle:'Quads / Glutes',  joint:'Hip → Knee → Ankle',       label:'Knee angle',  down:90,  up:155, inv:false},
+  {id:'situp',       name:'Sit-Up',         color:'#fb923c', muscle:'Abs / Hip flexors', joint:'Shoulder → Hip → Knee',  label:'Hip angle',   down:55,  up:120, inv:false},
+  {id:'jumpingjack', name:'Jumping Jack',   color:'#facc15', muscle:'Full body / Cardio', joint:'Shoulder → Hip → Knee',  label:'Hip angle',   down:160, up:110, inv:true },
+];
+const STORE = 'rep_sheet_thresholds';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ── Saved threshold overrides (this browser only) ─────────────────────
+function loadSaved() {
+  try { const v = JSON.parse(localStorage.getItem(STORE)); return v && typeof v === 'object' ? v : {}; }
+  catch (e) { return {}; }
+}
+function persist(o) { try { localStorage.setItem(STORE, JSON.stringify(o)); } catch (e) {} }
+let saved = loadSaved();
+
+function valOf(ex, k) {
+  const s = saved[ex.id];
+  return s && Number.isFinite(s[k]) ? s[k] : ex[k];
+}
+
+// ── Render exercise table ─────────────────────────────────────────────
+function angleInput(ex, k) {
+  return `<span class="th-wrap">
+    <input class="th-in" type="number" inputmode="numeric" min="0" max="180" step="1"
+      value="${valOf(ex, k)}" data-ex="${ex.id}" data-k="${k}"
+      aria-label="${esc(ex.name)} ${k === 'down' ? 'down' : 'up'} angle">
+    <span class="unit">°</span></span>`;
+}
+
+function renderExTable() {
+  $('ex-body').innerHTML = EX.map(ex => `
+    <tr data-cat="exercises">
+      <td><div class="td-label"><span class="ex-dot" style="background:${ex.color}"></span>${esc(ex.name)}</div></td>
+      <td>${esc(ex.muscle)}</td>
+      <td>${esc(ex.joint)}</td>
+      <td>${angleInput(ex, 'down')}</td>
+      <td>${angleInput(ex, 'up')}</td>
+      <td>${ex.inv ? 'Inverted' : 'Normal'}<div class="warn-txt" id="warn-${ex.id}"></div></td>
+      <td>${esc(ex.label)}</td>
+    </tr>`).join('');
+  EX.forEach(checkPair);
+}
+
+// Normal: down < up. Inverted: down > up. Both must be 0–180.
+function checkPair(ex) {
+  const get = k => parseFloat(document.querySelector(`.th-in[data-ex="${ex.id}"][data-k="${k}"]`).value);
+  const d = get('down'), u = get('up');
+  let msg = '';
+  if (![d, u].every(v => Number.isFinite(v) && v >= 0 && v <= 180)) msg = 'Angles must be 0–180°';
+  else if (ex.inv ? d <= u : d >= u) msg = ex.inv ? 'Down must be greater than up' : 'Down must be less than up';
+  $('warn-' + ex.id).textContent = msg;
+  document.querySelectorAll(`.th-in[data-ex="${ex.id}"]`).forEach(i => i.classList.toggle('invalid', !!msg));
+}
+
+$('ex-body').addEventListener('input', e => {
+  const inp = e.target;
+  if (!inp.classList.contains('th-in')) return;
+  const ex = EX.find(x => x.id === inp.dataset.ex);
+  const k = inp.dataset.k;
+  const n = parseFloat(inp.value);
+  if (Number.isFinite(n) && n >= 0 && n <= 180) {
+    saved[ex.id] = { ...(saved[ex.id] || {}), [k]: n };
+    persist(saved);
+  }
+  checkPair(ex);
+});
+
+$('reset-btn').addEventListener('click', () => {
+  saved = {};
+  persist(saved);
+  renderExTable();
+  applyFilter();
+});
+
+// ── Search + category filter ──────────────────────────────────────────
+let activeCat = 'all';
+
+function applyFilter() {
+  const term = $('q').value.trim().toLowerCase();
+  let shown = 0, total = 0;
+
+  document.querySelectorAll('.tbl-wrap').forEach(wrap => {
+    const catOk = activeCat === 'all' || activeCat === wrap.dataset.cat;
+    if (!catOk) { wrap.hidden = true; return; }
+
+    let wrapShown = 0;
+    wrap.querySelectorAll('tbody tr').forEach(tr => {
+      if (tr.classList.contains('section-row')) return;
+      total++;
+      const text = (tr.textContent + ' ' + [...tr.querySelectorAll('input')].map(i => i.value).join(' ')).toLowerCase();
+      const match = term === '' || text.includes(term);
+      tr.hidden = !match;
+      if (match) wrapShown++;
+    });
+    // Section headers only appear when there's no search term
+    wrap.querySelectorAll('.section-row').forEach(r => { r.hidden = term !== ''; });
+
+    wrap.hidden = wrapShown === 0;
+    shown += wrapShown;
+  });
+
+  $('empty-msg').hidden = shown > 0;
+  $('result-count').textContent = (term || activeCat !== 'all')
+    ? `${shown} of ${total} rows shown`
+    : '';
+}
+
+$('q').addEventListener('input', applyFilter);
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    activeCat = chip.dataset.cat;
+    document.querySelectorAll('.chip').forEach(c =>
+      c.setAttribute('aria-pressed', String(c === chip)));
+    applyFilter();
+  });
+});
+
+// ── Init ──────────────────────────────────────────────────────────────
+$('ex-count').textContent = `${EX.length} Exercises`;
+renderExTable();
+applyFilter();
+</script>

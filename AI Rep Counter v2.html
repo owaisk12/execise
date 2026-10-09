@@ -1,0 +1,691 @@
+<title>AI Rep Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
+
+<style>
+:root {
+  --bg:#080b10; --surface:#0f1520; --raised:#182030; --border:#1e2a3a;
+  --accent:#00e676; --accent2:#00b0ff; --danger:#ff3d57; --warn:#ffb300;
+  --fg:#e8f0fe; --muted:#5a6a80; --bar-h:56px;
+  color-scheme:dark;
+}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#f4f6fa;--surface:#fff;--raised:#eef1f7;--border:#dde3ef;
+  --accent:#009944;--accent2:#0077cc;--fg:#0d1520;--muted:#7a8899;color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --bg:#f4f6fa;--surface:#fff;--raised:#eef1f7;--border:#dde3ef;
+  --accent:#009944;--accent2:#0077cc;--fg:#0d1520;--muted:#7a8899;color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--fg);display:flex;flex-direction:column}
+
+/* Camera */
+#cam-wrap{position:relative;flex:1;background:#000;overflow:hidden}
+#input-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+#output-canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+
+/* Chart canvas overlay */
+#chart-canvas{position:absolute;bottom:0;left:0;right:0;height:90px;pointer-events:none;opacity:.85}
+
+/* Big rep counter */
+#rep-overlay{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none;z-index:5}
+#rep-number{font-family:'Barlow Condensed',sans-serif;font-size:clamp(4rem,18vw,8rem);font-weight:900;line-height:.9;color:var(--accent);text-shadow:0 0 40px rgba(0,230,118,.5);font-variant-numeric:tabular-nums;transition:transform .1s}
+#rep-number.pop{transform:scale(1.18)}
+#rep-label{font-family:'Barlow Condensed',sans-serif;font-size:.9rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-top:-2px}
+
+/* Target ring */
+#target-ring{position:absolute;top:10px;right:14px;display:flex;flex-direction:column;align-items:center;gap:3px;z-index:5;pointer-events:none}
+#target-ring svg{filter:drop-shadow(0 0 6px rgba(0,230,118,.4))}
+#target-count{font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;color:var(--accent);letter-spacing:.06em}
+
+/* Phase badge */
+#phase-badge{position:absolute;top:12px;left:14px;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:.25rem .7rem;border-radius:99px;background:rgba(0,0,0,.5);border:1.5px solid var(--muted);color:var(--muted);backdrop-filter:blur(6px);z-index:5;transition:color .2s,border-color .2s}
+#phase-badge.down{color:var(--accent2);border-color:var(--accent2)}
+#phase-badge.up{color:var(--accent);border-color:var(--accent)}
+
+/* Form score */
+#form-score{position:absolute;bottom:100px;right:14px;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:12px;padding:.5rem .75rem;z-index:5;text-align:center;min-width:72px}
+#form-val{font-family:'Barlow Condensed',sans-serif;font-size:1.5rem;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+#form-lbl{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+
+/* Angle */
+#angle-display{position:absolute;bottom:100px;left:14px;font-family:'Barlow Condensed',sans-serif;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:12px;padding:.5rem .75rem;z-index:5;min-width:80px}
+#angle-val{font-size:1.4rem;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+
+/* Interval timer overlay */
+#interval-overlay{position:absolute;inset:0;background:rgba(0,0,0,.7);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;backdrop-filter:blur(4px)}
+#interval-overlay.hidden{display:none}
+#interval-phase{font-family:'Barlow Condensed',sans-serif;font-size:2rem;font-weight:900;letter-spacing:.15em;text-transform:uppercase;margin-bottom:.5rem}
+#interval-countdown{font-family:'Barlow Condensed',sans-serif;font-size:6rem;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;color:var(--accent)}
+#interval-next{font-size:.9rem;color:var(--muted);margin-top:.5rem}
+
+/* Detect dot */
+#detect-dot{position:absolute;top:14px;left:50%;transform:translateX(-50%) translateX(-50px);width:8px;height:8px;border-radius:50%;background:var(--muted);z-index:6;transition:background .3s}
+#detect-dot.active{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+#detect-dot.lost{background:var(--danger)}
+
+/* Start screen */
+#start-screen{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:1.5rem;text-align:center;z-index:10;overflow-y:auto}
+#start-screen h2{font-family:'Barlow Condensed',sans-serif;font-size:2rem;font-weight:900;letter-spacing:.05em;text-transform:uppercase}
+#start-screen p{color:var(--muted);font-size:.85rem;max-width:300px}
+.start-icon{width:64px;height:64px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#000}
+
+/* Exercise pills */
+.ex-pills{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center;margin:.25rem 0}
+.ex-pill{padding:.35rem .85rem;border-radius:99px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;font-size:.8rem;font-weight:600;color:var(--muted);transition:all .15s}
+.ex-pill.active{border-color:var(--accent);color:var(--accent);background:rgba(0,230,118,.08)}
+
+/* Settings grid */
+.settings-row{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;width:100%;max-width:320px}
+.setting-block{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.6rem .75rem}
+.setting-label{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.3rem}
+.setting-input{background:var(--raised);border:1px solid var(--border);border-radius:6px;color:var(--fg);font-family:'Barlow Condensed',sans-serif;font-size:1.1rem;font-weight:700;text-align:center;padding:.3rem .5rem;width:100%;outline:none}
+.setting-input:focus{border-color:var(--accent)}
+
+/* Bottom controls */
+#controls{height:var(--bar-h);background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 .75rem;gap:.5rem;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0px)}
+.ctrl-stat{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:44px}
+.ctrl-val{font-family:'Barlow Condensed',sans-serif;font-size:1.3rem;font-weight:800;font-variant-numeric:tabular-nums;color:var(--accent);line-height:1}
+.ctrl-lbl{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.3rem;padding:.45rem .85rem;border-radius:9px;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+.btn-green{background:var(--accent);color:#000}.btn-green:hover{opacity:.88}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--fg)}.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-danger{background:rgba(255,61,87,.12);border:1px solid var(--danger);color:var(--danger)}
+
+/* History panel */
+#history-panel{position:absolute;inset:0;background:var(--bg);z-index:15;overflow-y:auto;padding:1rem;padding-bottom:4rem}
+#history-panel.hidden{display:none}
+.history-panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.history-panel-head h3{font-family:'Barlow Condensed',sans-serif;font-size:1.3rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.h-entry{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.85rem;margin-bottom:.6rem}
+.h-entry-top{display:flex;justify-content:space-between;align-items:center}
+.h-entry-ex{font-weight:700;font-size:.95rem}
+.h-entry-date{font-size:.72rem;color:var(--muted)}
+.h-entry-stats{display:flex;gap:1rem;margin-top:.45rem;flex-wrap:wrap}
+.h-stat{font-size:.78rem;color:var(--muted)}.h-stat span{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+
+/* Summary modal */
+#summary-modal{position:absolute;inset:0;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;z-index:25;padding:1.5rem}
+#summary-modal.open{display:flex}
+.summary-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:2rem 1.5rem;width:100%;max-width:340px;text-align:center}
+.sum-title{font-family:'Barlow Condensed',sans-serif;font-size:1.4rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.2rem}
+.sum-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1.2rem}
+.sum-stat-val{font-family:'Barlow Condensed',sans-serif;font-size:2.2rem;font-weight:900;color:var(--accent);line-height:1;font-variant-numeric:tabular-nums}
+.sum-stat-lbl{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:.2rem}
+.sum-btns{display:flex;gap:.6rem}
+.sum-btns .btn{flex:1}
+
+/* Status */
+#status-bar{position:absolute;bottom:68px;left:0;right:0;text-align:center;font-size:.75rem;color:rgba(255,255,255,.45);pointer-events:none;z-index:6}
+
+/* Celebration */
+#celebration{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:30}
+#celebration.hidden{display:none}
+.celebrate-text{font-family:'Barlow Condensed',sans-serif;font-size:4rem;font-weight:900;color:var(--accent);text-shadow:0 0 40px rgba(0,230,118,.8);animation:celebPop .7s ease-out forwards}
+@keyframes celebPop{0%{opacity:0;transform:scale(.5)}60%{opacity:1;transform:scale(1.1)}100%{opacity:0;transform:scale(1)}}
+
+/* Voice toggle */
+.toggle-row{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--muted)}
+.toggle{position:relative;width:36px;height:20px;cursor:pointer}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-track{position:absolute;inset:0;background:var(--border);border-radius:99px;transition:.2s}
+.toggle input:checked+.toggle-track{background:var(--accent)}
+.toggle-track::after{content:'';position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:.2s}
+.toggle input:checked+.toggle-track::after{transform:translateX(16px)}
+
+@media(min-width:600px){#start-screen{justify-content:center}}
+</style>
+
+<!-- Camera area -->
+<div id="cam-wrap">
+  <video id="input-video" playsinline autoplay muted></video>
+  <canvas id="output-canvas"></canvas>
+  <canvas id="chart-canvas"></canvas>
+
+  <div id="detect-dot"></div>
+
+  <!-- Rep counter -->
+  <div id="rep-overlay">
+    <div id="rep-number">0</div>
+    <div id="rep-label">Reps</div>
+  </div>
+
+  <!-- Target ring -->
+  <div id="target-ring">
+    <svg id="target-svg" width="52" height="52" viewBox="0 0 52 52">
+      <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
+      <circle id="target-arc" cx="26" cy="26" r="22" fill="none" stroke="var(--accent)"
+        stroke-width="3" stroke-dasharray="138.2" stroke-dashoffset="138.2"
+        stroke-linecap="round" transform="rotate(-90 26 26)" style="transition:stroke-dashoffset .3s"/>
+    </svg>
+    <div id="target-count">0/0</div>
+  </div>
+
+  <div id="phase-badge">—</div>
+
+  <!-- Angle -->
+  <div id="angle-display">
+    <div id="angle-val">—°</div>
+    <div style="font-size:.62rem;color:var(--muted);margin-top:2px" id="angle-label-txt">Elbow angle</div>
+  </div>
+
+  <!-- Form score -->
+  <div id="form-score">
+    <div id="form-val" style="color:var(--muted)">—</div>
+    <div id="form-lbl" class="form-lbl">Form</div>
+  </div>
+
+  <!-- Interval overlay -->
+  <div id="interval-overlay" class="hidden">
+    <div id="interval-phase">REST</div>
+    <div id="interval-countdown">0</div>
+    <div id="interval-next"></div>
+  </div>
+
+  <!-- Status -->
+  <div id="status-bar">Loading pose model…</div>
+
+  <!-- Celebration -->
+  <div id="celebration" class="hidden"><div class="celebrate-text">🎯 GOAL!</div></div>
+
+  <!-- History panel -->
+  <div id="history-panel" class="hidden">
+    <div class="history-panel-head">
+      <h3>Session History</h3>
+      <button class="btn btn-ghost" id="history-close-btn">✕ Close</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
+  <!-- Start screen -->
+  <div id="start-screen">
+    <div class="start-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4v16M18 4v16M2 9h4M18 9h4M2 15h4M18 15h4"/></svg>
+    </div>
+    <h2>AI Rep Counter</h2>
+    <p>Camera detects your body and counts reps automatically.</p>
+
+    <div class="ex-pills" id="ex-pills">
+      <button class="ex-pill active" data-ex="pushup">Push-Up</button>
+      <button class="ex-pill" data-ex="squat">Squat</button>
+      <button class="ex-pill" data-ex="curl">Bicep Curl</button>
+      <button class="ex-pill" data-ex="pullup">Pull-Up</button>
+      <button class="ex-pill" data-ex="ohp">Shoulder Press</button>
+      <button class="ex-pill" data-ex="lunge">Lunge</button>
+      <button class="ex-pill" data-ex="situp">Sit-Up</button>
+      <button class="ex-pill" data-ex="jumpingjack">Jumping Jack</button>
+    </div>
+
+    <div class="settings-row">
+      <div class="setting-block">
+        <div class="setting-label">Target Reps</div>
+        <input class="setting-input" type="number" id="target-input" value="10" min="1" max="200">
+      </div>
+      <div class="setting-block">
+        <div class="setting-label">Sets</div>
+        <input class="setting-input" type="number" id="sets-input" value="3" min="1" max="20">
+      </div>
+      <div class="setting-block">
+        <div class="setting-label">Work (sec)</div>
+        <input class="setting-input" type="number" id="work-input" value="40" min="5" max="300">
+      </div>
+      <div class="setting-block">
+        <div class="setting-label">Rest (sec)</div>
+        <input class="setting-input" type="number" id="rest-input" value="20" min="5" max="300">
+      </div>
+    </div>
+
+    <div class="toggle-row">
+      <label class="toggle">
+        <input type="checkbox" id="voice-toggle" checked>
+        <span class="toggle-track"></span>
+      </label>
+      Voice announcements
+    </div>
+    <div class="toggle-row">
+      <label class="toggle">
+        <input type="checkbox" id="interval-toggle">
+        <span class="toggle-track"></span>
+      </label>
+      Interval timer mode
+    </div>
+
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center">
+      <button class="btn btn-green" id="start-btn" style="padding:.65rem 1.75rem;font-size:.95rem">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Start Camera
+      </button>
+      <button class="btn btn-ghost" id="history-open-btn" style="padding:.65rem 1rem;font-size:.85rem">📋 History</button>
+    </div>
+    <p style="font-size:.7rem">Camera stays on-device. Nothing is uploaded.</p>
+  </div>
+
+  <!-- Summary modal -->
+  <div id="summary-modal">
+    <div class="summary-card">
+      <div class="sum-title" id="sum-title">Set Done 💪</div>
+      <div class="sum-stats">
+        <div><div class="sum-stat-val" id="sum-reps">0</div><div class="sum-stat-lbl">Reps</div></div>
+        <div><div class="sum-stat-val" id="sum-sets">0</div><div class="sum-stat-lbl">Sets</div></div>
+        <div><div class="sum-stat-val" id="sum-form">—</div><div class="sum-stat-lbl">Avg Form</div></div>
+      </div>
+      <div class="sum-btns">
+        <button class="btn btn-green" id="sum-restart">Next Set</button>
+        <button class="btn btn-ghost" id="sum-done">Finish</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom controls -->
+<div id="controls" hidden>
+  <div class="ctrl-stat"><div class="ctrl-val" id="ctrl-reps">0</div><div class="ctrl-lbl">Reps</div></div>
+  <div class="ctrl-stat"><div class="ctrl-val" id="ctrl-sets">0</div><div class="ctrl-lbl">Set</div></div>
+  <div class="ctrl-stat"><div class="ctrl-val" id="ctrl-time">0:00</div><div class="ctrl-lbl">Time</div></div>
+  <div class="ctrl-stat"><div class="ctrl-val" id="ctrl-total">0</div><div class="ctrl-lbl">Total</div></div>
+  <button class="btn btn-ghost" id="reset-btn" style="font-size:.75rem">Reset</button>
+  <button class="btn btn-danger" id="stop-btn" style="font-size:.75rem">Stop</button>
+</div>
+
+<script>
+// ── Exercise library ────────────────────────────────────────────────
+const EXERCISES = {
+  pushup:      {name:'Push-Up',       joints:['LEFT_SHOULDER','LEFT_ELBOW','LEFT_WRIST'],   down:90,  up:155, inv:false, label:'Elbow angle'},
+  squat:       {name:'Squat',         joints:['LEFT_HIP','LEFT_KNEE','LEFT_ANKLE'],          down:90,  up:160, inv:false, label:'Knee angle'},
+  curl:        {name:'Bicep Curl',    joints:['LEFT_SHOULDER','LEFT_ELBOW','LEFT_WRIST'],   down:155, up:50,  inv:true,  label:'Elbow angle'},
+  pullup:      {name:'Pull-Up',       joints:['LEFT_SHOULDER','LEFT_ELBOW','LEFT_WRIST'],   down:60,  up:150, inv:false, label:'Elbow angle'},
+  ohp:         {name:'Shoulder Press',joints:['LEFT_SHOULDER','LEFT_ELBOW','LEFT_WRIST'],   down:90,  up:160, inv:false, label:'Elbow angle'},
+  lunge:       {name:'Lunge',         joints:['LEFT_HIP','LEFT_KNEE','LEFT_ANKLE'],          down:90,  up:155, inv:false, label:'Knee angle'},
+  situp:       {name:'Sit-Up',        joints:['LEFT_SHOULDER','LEFT_HIP','LEFT_KNEE'],       down:55,  up:120, inv:false, label:'Hip angle'},
+  jumpingjack: {name:'Jumping Jack',  joints:['LEFT_SHOULDER','LEFT_HIP','LEFT_KNEE'],       down:160, up:110, inv:true,  label:'Hip angle'},
+};
+const LM = {
+  LEFT_SHOULDER:11,LEFT_ELBOW:13,LEFT_WRIST:15,
+  RIGHT_SHOULDER:12,RIGHT_ELBOW:14,RIGHT_WRIST:16,
+  LEFT_HIP:23,LEFT_KNEE:25,LEFT_ANKLE:27,
+  RIGHT_HIP:24,RIGHT_KNEE:26,RIGHT_ANKLE:28,
+};
+
+// ── State ──────────────────────────────────────────────────────────
+let currentEx='pushup', reps=0, totalReps=0, sets=0, completedSets=0;
+let phase='up', isRunning=false, sessionStart=0;
+let timerInterval=null, intervalTimerInt=null;
+let targetReps=10, targetSets=3, workSec=40, restSec=20;
+let voiceOn=true, intervalMode=false;
+let intervalPhase='work', intervalLeft=0;
+let formScores=[], angleHistory=[];
+let lastAngle=null;
+let pose=null, camera=null;
+let detLost=false, lostTimer=null;
+let poseReady=false;
+
+// ── Persistent history ─────────────────────────────────────────────
+function loadHist(){try{return JSON.parse(localStorage.getItem('arc_history')||'[]')}catch{return[]}}
+function saveHist(h){try{localStorage.setItem('arc_history',JSON.stringify(h))}catch{}}
+
+// ── UI ─────────────────────────────────────────────────────────────
+const videoEl=document.getElementById('input-video');
+const canvasEl=document.getElementById('output-canvas');
+const chartCv=document.getElementById('chart-canvas');
+const ctx=canvasEl.getContext('2d');
+const chartCtx=chartCv.getContext('2d');
+
+function $(id){return document.getElementById(id)}
+
+// Exercise pills
+document.querySelectorAll('.ex-pill').forEach(p=>{
+  p.addEventListener('click',()=>{
+    document.querySelectorAll('.ex-pill').forEach(x=>x.classList.remove('active'));
+    p.classList.add('active'); currentEx=p.dataset.ex;
+    $('angle-label-txt').textContent=EXERCISES[currentEx].label;
+  });
+});
+
+// Settings
+$('target-input').addEventListener('change',()=>{targetReps=parseInt($('target-input').value)||10});
+$('sets-input').addEventListener('change',()=>{targetSets=parseInt($('sets-input').value)||3});
+$('work-input').addEventListener('change',()=>{workSec=parseInt($('work-input').value)||40});
+$('rest-input').addEventListener('change',()=>{restSec=parseInt($('rest-input').value)||20});
+$('voice-toggle').addEventListener('change',()=>{voiceOn=$('voice-toggle').checked});
+$('interval-toggle').addEventListener('change',()=>{intervalMode=$('interval-toggle').checked});
+
+// History panel
+$('history-open-btn').addEventListener('click',openHistory);
+$('history-close-btn').addEventListener('click',()=>$('history-panel').classList.add('hidden'));
+
+function openHistory(){
+  const h=loadHist(); const list=$('history-list');
+  if(h.length===0){list.innerHTML='<p style="color:var(--muted);text-align:center;padding:2rem">No sessions yet.</p>';
+  }else{
+    list.innerHTML=h.slice(0,30).map(s=>`
+      <div class="h-entry">
+        <div class="h-entry-top">
+          <div class="h-entry-ex">${s.ex}</div>
+          <div class="h-entry-date">${new Date(s.date).toLocaleDateString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+        <div class="h-entry-stats">
+          <div class="h-stat">Reps <span>${s.reps}</span></div>
+          <div class="h-stat">Sets <span>${s.sets}</span></div>
+          <div class="h-stat">Time <span>${fmtSec(s.duration)}</span></div>
+          <div class="h-stat">Form <span>${s.form||'—'}</span></div>
+        </div>
+      </div>`).join('');
+  }
+  $('history-panel').classList.remove('hidden');
+}
+
+// Start
+$('start-btn').addEventListener('click',startSession);
+async function startSession(){
+  targetReps=parseInt($('target-input').value)||10;
+  targetSets=parseInt($('sets-input').value)||3;
+  workSec=parseInt($('work-input').value)||40;
+  restSec=parseInt($('rest-input').value)||20;
+  voiceOn=$('voice-toggle').checked;
+  intervalMode=$('interval-toggle').checked;
+
+  $('start-screen').hidden=true;
+  $('controls').hidden=false;
+  isRunning=true; reps=0; totalReps=0; sets=0; completedSets=0;
+  phase='up'; formScores=[]; angleHistory=[];
+  sessionStart=Date.now();
+  updateUI(); updateTarget();
+  startElapsed();
+  if(intervalMode) startIntervalTimer();
+  await initCamera();
+}
+
+function startElapsed(){
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{
+    if(!isRunning)return;
+    $('ctrl-time').textContent=fmtSec(Math.floor((Date.now()-sessionStart)/1000));
+  },500);
+}
+
+// ── Interval timer ──────────────────────────────────────────────────
+function startIntervalTimer(){
+  intervalPhase='work'; intervalLeft=workSec;
+  updateIntervalUI(); showIntervalOverlay(false);
+  clearInterval(intervalTimerInt);
+  intervalTimerInt=setInterval(()=>{
+    intervalLeft--;
+    if(intervalLeft<=0){
+      if(intervalPhase==='work'){
+        intervalPhase='rest'; intervalLeft=restSec;
+        showIntervalOverlay(true);
+        speak('Rest!');
+      } else {
+        intervalPhase='work'; intervalLeft=workSec;
+        showIntervalOverlay(false);
+        speak('Go!');
+      }
+    }
+    updateIntervalUI();
+  },1000);
+}
+
+function showIntervalOverlay(show){
+  $('interval-overlay').classList.toggle('hidden',!show);
+}
+function updateIntervalUI(){
+  $('interval-phase').textContent=intervalPhase==='work'?'WORK':'REST';
+  $('interval-phase').style.color=intervalPhase==='work'?'var(--accent)':'var(--accent2)';
+  $('interval-countdown').textContent=intervalLeft;
+  $('interval-next').textContent=intervalPhase==='work'?`Rest in ${intervalLeft}s`:`Work in ${intervalLeft}s`;
+}
+
+// ── Voice ───────────────────────────────────────────────────────────
+function speak(text){
+  if(!voiceOn||!window.speechSynthesis)return;
+  const u=new SpeechSynthesisUtterance(text);
+  u.rate=1.1; u.pitch=1; speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+
+// ── Angle calc ──────────────────────────────────────────────────────
+function calcAngle(a,b,c){
+  let r=Math.atan2(c.y-b.y,c.x-b.x)-Math.atan2(a.y-b.y,a.x-b.x);
+  let d=Math.abs(r*180/Math.PI);
+  return d>180?360-d:d;
+}
+function getAngle(lm,ex){
+  const cfg=EXERCISES[ex];
+  const[na,nb,nc]=cfg.joints;
+  const ia=LM[na],ib=LM[nb],ic=LM[nc];
+  const ra=na.replace('LEFT','RIGHT'),rb=nb.replace('LEFT','RIGHT'),rc=nc.replace('LEFT','RIGHT');
+  const ria=LM[ra],rib=LM[rb],ric=LM[rc];
+  const lv=(lm[ia]?.visibility||0)+(lm[ib]?.visibility||0)+(lm[ic]?.visibility||0);
+  const rv=(lm[ria]?.visibility||0)+(lm[rib]?.visibility||0)+(lm[ric]?.visibility||0);
+  const pts=lv>=rv?[lm[ia],lm[ib],lm[ic]]:[lm[ria],lm[rib],lm[ric]];
+  if(Math.min(...pts.map(p=>p?.visibility||0))<0.4)return null;
+  return calcAngle(pts[0],pts[1],pts[2]);
+}
+
+// ── Form quality score ──────────────────────────────────────────────
+function calcFormScore(angle,ex){
+  const cfg=EXERCISES[ex];
+  const ideal=cfg.inv?cfg.up:cfg.down;
+  const diff=Math.abs(angle-ideal);
+  const score=Math.max(0,100-diff*1.5);
+  return Math.round(score);
+}
+
+// ── Rep counting ────────────────────────────────────────────────────
+function countRep(angle){
+  if(angle===null)return;
+  const cfg=EXERCISES[currentEx];
+  const{down,up,inv}=cfg;
+  if(!inv){
+    if(angle<down&&phase==='up'){phase='down';updatePhase()}
+    else if(angle>up&&phase==='down'){
+      phase='up'; reps++; totalReps++;
+      const fs=calcFormScore(angle,currentEx);
+      formScores.push(fs);
+      popRep(); updateUI(); updateTarget();
+      announceRep();
+      if(reps>=targetReps) onSetComplete();
+    }
+  } else {
+    if(angle>down&&phase==='up'){phase='down';updatePhase()}
+    else if(angle<up&&phase==='down'){
+      phase='up'; reps++; totalReps++;
+      const fs=calcFormScore(angle,currentEx);
+      formScores.push(fs);
+      popRep(); updateUI(); updateTarget();
+      announceRep();
+      if(reps>=targetReps) onSetComplete();
+    }
+  }
+  // form display
+  if(formScores.length>0){
+    const avg=Math.round(formScores.reduce((a,b)=>a+b,0)/formScores.length);
+    const fv=$('form-val');
+    fv.textContent=avg+'%';
+    fv.style.color=avg>=80?'var(--accent)':avg>=60?'var(--warn)':'var(--danger)';
+  }
+}
+
+function announceRep(){
+  if(reps===targetReps){speak('Goal reached! Great set!')}
+  else if(reps%5===0&&reps>0){speak(reps+' reps')}
+  else if(reps===1){speak('1')}
+}
+
+function onSetComplete(){
+  completedSets++;
+  showCelebration();
+  speak(`Set ${completedSets} complete! Rest up.`);
+  if(completedSets>=targetSets){
+    setTimeout(stopSession,1200);
+  } else {
+    setTimeout(()=>{
+      reps=0; formScores=[]; phase='up'; updateUI(); updateTarget();
+    },1500);
+  }
+}
+
+function showCelebration(){
+  const c=$('celebration'); c.classList.remove('hidden');
+  setTimeout(()=>c.classList.add('hidden'),800);
+}
+
+function updatePhase(){
+  const pb=$('phase-badge');
+  pb.textContent=phase==='down'?'▼ Down':'▲ Up';
+  pb.className=phase;
+}
+
+function popRep(){
+  const n=$('rep-number');
+  n.classList.add('pop');
+  setTimeout(()=>n.classList.remove('pop'),150);
+}
+
+function updateUI(){
+  $('rep-number').textContent=reps;
+  $('ctrl-reps').textContent=reps;
+  $('ctrl-sets').textContent=(completedSets+1)+'/'+targetSets;
+  $('ctrl-total').textContent=totalReps;
+}
+
+function updateTarget(){
+  const pct=Math.min(reps/targetReps,1);
+  const circ=138.2;
+  $('target-arc').style.strokeDashoffset=circ*(1-pct);
+  $('target-count').textContent=reps+'/'+targetReps;
+}
+
+// ── Live angle chart ────────────────────────────────────────────────
+const MAX_HIST=120;
+function pushAngle(a){
+  angleHistory.push(a===null?null:Math.round(a));
+  if(angleHistory.length>MAX_HIST)angleHistory.shift();
+  drawChart();
+}
+
+function drawChart(){
+  const w=chartCv.width=chartCv.offsetWidth;
+  const h=chartCv.height=90;
+  chartCtx.clearRect(0,0,w,h);
+  const vals=angleHistory.filter(v=>v!==null);
+  if(vals.length<2)return;
+  const min=0, max=180;
+  chartCtx.beginPath();
+  let first=true;
+  const step=w/(MAX_HIST-1);
+  for(let i=0;i<angleHistory.length;i++){
+    const v=angleHistory[i];
+    if(v===null){first=true;continue}
+    const x=i*step;
+    const y=h-(v-min)/(max-min)*h;
+    if(first){chartCtx.moveTo(x,y);first=false}else{chartCtx.lineTo(x,y)}
+  }
+  chartCtx.strokeStyle='rgba(0,230,118,0.7)';
+  chartCtx.lineWidth=1.5;
+  chartCtx.stroke();
+  // threshold lines
+  const cfg=EXERCISES[currentEx];
+  const drawLine=(val,color)=>{
+    const y=h-(val-min)/(max-min)*h;
+    chartCtx.beginPath();
+    chartCtx.moveTo(0,y);chartCtx.lineTo(w,y);
+    chartCtx.strokeStyle=color;chartCtx.lineWidth=1;
+    chartCtx.setLineDash([4,4]);chartCtx.stroke();chartCtx.setLineDash([]);
+  };
+  drawLine(cfg.down,'rgba(0,176,255,0.5)');
+  drawLine(cfg.up,'rgba(255,179,0,0.5)');
+}
+
+// ── MediaPipe ───────────────────────────────────────────────────────
+async function initCamera(){
+  $('status-bar').textContent='Loading pose model…';
+  pose=new Pose({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}`});
+  pose.setOptions({modelComplexity:1,smoothLandmarks:true,enableSegmentation:false,minDetectionConfidence:.5,minTrackingConfidence:.5});
+  pose.onResults(onResults);
+  try{
+    await pose.initialize();
+    poseReady=true; $('status-bar').textContent='';
+    camera=new Camera(videoEl,{
+      onFrame:async()=>{
+        if(!isRunning)return;
+        canvasEl.width=videoEl.videoWidth||canvasEl.offsetWidth;
+        canvasEl.height=videoEl.videoHeight||canvasEl.offsetHeight;
+        await pose.send({image:videoEl});
+      },width:640,height:480
+    });
+    camera.start();
+  }catch(e){$('status-bar').textContent='Camera error: '+e.message}
+}
+
+function onResults(results){
+  ctx.clearRect(0,0,canvasEl.width,canvasEl.height);
+  if(!results.poseLandmarks||!results.poseLandmarks.length){markLost();pushAngle(null);return}
+  markActive();
+  drawConnectors(ctx,results.poseLandmarks,POSE_CONNECTIONS,{color:'rgba(0,230,118,0.35)',lineWidth:2});
+  drawLandmarks(ctx,results.poseLandmarks,{color:'rgba(0,230,118,0.8)',fillColor:'rgba(0,0,0,.4)',radius:3,lineWidth:1});
+  const angle=getAngle(results.poseLandmarks,currentEx);
+  $('angle-val').textContent=angle!==null?Math.round(angle)+'°':'—°';
+  pushAngle(angle);
+  countRep(angle);
+  updatePhase();
+}
+
+function markActive(){$('detect-dot').className='active';clearTimeout(lostTimer);detLost=false}
+function markLost(){
+  if(!detLost){lostTimer=setTimeout(()=>{
+    $('detect-dot').className='lost';detLost=true;
+    $('phase-badge').textContent='No body';$('phase-badge').className='';
+  },1000)}
+}
+
+// ── Stop / reset ─────────────────────────────────────────────────────
+$('reset-btn').addEventListener('click',()=>{
+  reps=0; completedSets++; formScores=[]; phase='up'; updateUI(); updateTarget();
+  speak('Reset. New set.');
+});
+$('stop-btn').addEventListener('click',stopSession);
+
+function stopSession(){
+  isRunning=false;
+  clearInterval(timerInterval);clearInterval(intervalTimerInt);
+  if(camera)camera.stop();
+  $('interval-overlay').classList.add('hidden');
+  const elapsed=Math.floor((Date.now()-sessionStart)/1000);
+  const avgForm=formScores.length?Math.round(formScores.reduce((a,b)=>a+b,0)/formScores.length):null;
+  // Save to history
+  const h=loadHist();
+  h.unshift({ex:EXERCISES[currentEx].name,date:new Date().toISOString(),reps:totalReps,sets:completedSets+(reps>0?1:0),duration:elapsed,form:avgForm?avgForm+'%':null});
+  if(h.length>100)h.splice(100);
+  saveHist(h);
+  // Show summary
+  $('sum-title').textContent=totalReps>=targetReps*targetSets?'Workout Complete 🎉':'Session Done 💪';
+  $('sum-reps').textContent=totalReps;
+  $('sum-sets').textContent=completedSets+(reps>0?1:0);
+  $('sum-form').textContent=avgForm?avgForm+'%':'—';
+  $('summary-modal').classList.add('open');
+}
+
+$('sum-restart').addEventListener('click',()=>{
+  $('summary-modal').classList.remove('open');
+  reps=0; totalReps=0; completedSets=0; formScores=[]; phase='up';
+  isRunning=true; sessionStart=Date.now();
+  updateUI(); updateTarget(); startElapsed();
+  if(intervalMode)startIntervalTimer();
+  if(camera)camera.start();
+  speak('New session. Go!');
+});
+$('sum-done').addEventListener('click',()=>{
+  $('summary-modal').classList.remove('open');
+  $('controls').hidden=true;
+  $('start-screen').hidden=false;
+  ctx.clearRect(0,0,canvasEl.width,canvasEl.height);
+  chartCtx.clearRect(0,0,chartCv.width,chartCv.height);
+});
+
+function fmtSec(s){return s<60?s+'s':`${Math.floor(s/60)}m${s%60}s`}
+</script>
