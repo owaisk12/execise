@@ -1,0 +1,670 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>AI Rep Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- MediaPipe Pose -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
+
+<style>
+/* ── Tokens ─────────────────────────────────────────────────
+   Layout: full-screen camera view, overlay HUD
+   Color:  deep black base, electric green accent (sport / cv)
+   Type:   Barlow Condensed for big numbers, Inter for UI
+────────────────────────────────────────────────────────────── */
+:root {
+  --bg:        #080b10;
+  --surface:   #0f1520;
+  --raised:    #182030;
+  --border:    #1e2a3a;
+  --accent:    #00e676;
+  --accent2:   #00b0ff;
+  --danger:    #ff3d57;
+  --warn:      #ffb300;
+  --fg:        #e8f0fe;
+  --muted:     #5a6a80;
+  --bar-h:     60px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:      #f4f6fa;
+    --surface: #ffffff;
+    --raised:  #eef1f7;
+    --border:  #dde3ef;
+    --accent:  #009944;
+    --accent2: #0077cc;
+    --fg:      #0d1520;
+    --muted:   #7a8899;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg:      #f4f6fa;
+  --surface: #ffffff;
+  --raised:  #eef1f7;
+  --border:  #dde3ef;
+  --accent:  #009944;
+  --accent2: #0077cc;
+  --fg:      #0d1520;
+  --muted:   #7a8899;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  display: flex; flex-direction: column;
+}
+
+/* ── Camera area ───────────────────────────────────────────── */
+#cam-wrap {
+  position: relative;
+  flex: 1;
+  background: #000;
+  overflow: hidden;
+}
+#input-video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror */
+}
+#output-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+/* ── Big rep counter overlay ──────────────────────────────── */
+#rep-overlay {
+  position: absolute;
+  top: 16px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  pointer-events: none;
+}
+#rep-number {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(5rem, 20vw, 9rem);
+  font-weight: 900;
+  line-height: .9;
+  color: var(--accent);
+  text-shadow: 0 0 40px rgba(0,230,118,.5);
+  font-variant-numeric: tabular-nums;
+  transition: transform .1s;
+}
+#rep-number.pop { transform: scale(1.18); }
+#rep-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem; font-weight: 700;
+  letter-spacing: .18em; text-transform: uppercase;
+  color: rgba(255,255,255,.6);
+  margin-top: -4px;
+}
+
+/* ── Phase badge ───────────────────────────────────────────── */
+#phase-badge {
+  position: absolute;
+  top: 16px; right: 16px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: .3rem .8rem; border-radius: 99px;
+  background: rgba(0,0,0,.5); border: 1.5px solid var(--muted);
+  color: var(--muted);
+  backdrop-filter: blur(6px);
+  transition: color .2s, border-color .2s;
+}
+#phase-badge.down { color: var(--accent2); border-color: var(--accent2); }
+#phase-badge.up   { color: var(--accent);  border-color: var(--accent); }
+
+/* ── Angle arc ─────────────────────────────────────────────── */
+#angle-display {
+  position: absolute;
+  bottom: 80px; left: 16px;
+  font-family: 'Barlow Condensed', sans-serif;
+  background: rgba(0,0,0,.5);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: .5rem .75rem;
+  font-size: .85rem;
+  color: var(--fg);
+  min-width: 90px;
+}
+#angle-val {
+  font-size: 1.5rem; font-weight: 800;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Start / idle screen ───────────────────────────────────── */
+#start-screen {
+  position: absolute; inset: 0;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1.2rem;
+  padding: 2rem;
+  text-align: center;
+  z-index: 10;
+}
+#start-screen h2 {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 2rem; font-weight: 900;
+  letter-spacing: .05em; text-transform: uppercase;
+}
+#start-screen p { color: var(--muted); font-size: .9rem; max-width: 280px; }
+.start-icon {
+  width: 72px; height: 72px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #000;
+}
+
+/* ── Exercise selector pills ───────────────────────────────── */
+.ex-pills {
+  display: flex; flex-wrap: wrap; gap: .5rem;
+  justify-content: center; margin: .25rem 0;
+}
+.ex-pill {
+  padding: .4rem 1rem; border-radius: 99px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  cursor: pointer; font-size: .85rem; font-weight: 600;
+  color: var(--muted); transition: all .15s;
+}
+.ex-pill.active {
+  border-color: var(--accent); color: var(--accent);
+  background: rgba(0,230,118,.08);
+}
+
+/* ── Bottom controls ───────────────────────────────────────── */
+#controls {
+  height: var(--bar-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 1rem; gap: .75rem;
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.ctrl-stat {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: 48px;
+}
+.ctrl-val {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.4rem; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent); line-height: 1;
+}
+.ctrl-lbl { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+  padding: .5rem 1rem; border-radius: 10px;
+  font-family: 'Inter', sans-serif; font-size: .85rem; font-weight: 600;
+  cursor: pointer; border: none; transition: all .15s;
+}
+.btn-green  { background: var(--accent);  color: #000; }
+.btn-green:hover  { opacity: .88; }
+.btn-ghost  { background: none; border: 1px solid var(--border); color: var(--fg); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: rgba(255,61,87,.12); border: 1px solid var(--danger); color: var(--danger); }
+.btn-danger:hover { background: rgba(255,61,87,.22); }
+
+/* ── Status bar (loading/error) ───────────────────────────── */
+#status-bar {
+  position: absolute; bottom: 70px; left: 0; right: 0;
+  text-align: center; font-size: .8rem;
+  color: rgba(255,255,255,.5); pointer-events: none;
+}
+
+/* ── Pose detection indicator ─────────────────────────────── */
+#detect-dot {
+  position: absolute; top: 16px; left: 16px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--muted);
+  transition: background .3s;
+}
+#detect-dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+#detect-dot.lost   { background: var(--danger); }
+
+/* ── Session summary modal ─────────────────────────────────── */
+#summary-modal {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.8);
+  display: none; align-items: center; justify-content: center;
+  z-index: 20; padding: 1.5rem;
+}
+#summary-modal.open { display: flex; }
+.summary-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2rem 1.5rem;
+  width: 100%; max-width: 340px;
+  text-align: center;
+}
+.sum-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.4rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .08em; margin-bottom: 1.2rem;
+}
+.sum-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem;
+  margin-bottom: 1.5rem;
+}
+.sum-stat-val {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 2.5rem; font-weight: 900;
+  color: var(--accent); line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.sum-stat-lbl { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: .2rem; }
+.sum-btns { display: flex; gap: .75rem; }
+.sum-btns .btn { flex: 1; }
+
+@media (min-width: 600px) {
+  #rep-number { font-size: 10rem; }
+}
+</style>
+
+<!-- ── Camera area ──────────────────────────────────────────── -->
+<div id="cam-wrap">
+  <video id="input-video" playsinline autoplay muted></video>
+  <canvas id="output-canvas"></canvas>
+
+  <!-- Detection dot -->
+  <div id="detect-dot"></div>
+
+  <!-- Rep counter -->
+  <div id="rep-overlay">
+    <div id="rep-number">0</div>
+    <div id="rep-label">Reps</div>
+  </div>
+
+  <!-- Phase -->
+  <div id="phase-badge">—</div>
+
+  <!-- Angle -->
+  <div id="angle-display">
+    <div id="angle-val">—°</div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:2px;">Elbow angle</div>
+  </div>
+
+  <!-- Status -->
+  <div id="status-bar">Loading pose model…</div>
+
+  <!-- Start screen -->
+  <div id="start-screen">
+    <div class="start-icon">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M6 4v16M18 4v16M2 9h4M18 9h4M2 15h4M18 15h4"/>
+      </svg>
+    </div>
+    <h2>AI Rep Counter</h2>
+    <p>Camera tracks your body and counts reps automatically in real-time.</p>
+
+    <div class="ex-pills" id="ex-pills">
+      <button class="ex-pill active" data-ex="pushup">Push-Up</button>
+      <button class="ex-pill" data-ex="squat">Squat</button>
+      <button class="ex-pill" data-ex="curl">Bicep Curl</button>
+    </div>
+
+    <button class="btn btn-green" id="start-btn" style="padding:.7rem 2rem;font-size:1rem;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Start Camera
+    </button>
+    <p style="font-size:.75rem;">Your camera feed stays on-device — nothing is uploaded.</p>
+  </div>
+
+  <!-- Summary modal -->
+  <div id="summary-modal">
+    <div class="summary-card">
+      <div class="sum-title">Session Done 💪</div>
+      <div class="sum-stats">
+        <div><div class="sum-stat-val" id="sum-reps">0</div><div class="sum-stat-lbl">Reps</div></div>
+        <div><div class="sum-stat-val" id="sum-sets">0</div><div class="sum-stat-lbl">Sets</div></div>
+        <div><div class="sum-stat-val" id="sum-time">0s</div><div class="sum-stat-lbl">Time</div></div>
+      </div>
+      <div class="sum-btns">
+        <button class="btn btn-green" id="sum-restart">New Set</button>
+        <button class="btn btn-ghost" id="sum-done">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bottom controls ──────────────────────────────────────── -->
+<div id="controls" hidden>
+  <div class="ctrl-stat">
+    <div class="ctrl-val" id="ctrl-reps">0</div>
+    <div class="ctrl-lbl">Reps</div>
+  </div>
+  <div class="ctrl-stat">
+    <div class="ctrl-val" id="ctrl-sets">0</div>
+    <div class="ctrl-lbl">Sets</div>
+  </div>
+  <div class="ctrl-stat">
+    <div class="ctrl-val" id="ctrl-time">0:00</div>
+    <div class="ctrl-lbl">Time</div>
+  </div>
+  <button class="btn btn-ghost" id="reset-btn" style="margin-left:auto;">Reset</button>
+  <button class="btn btn-danger" id="stop-btn">Stop</button>
+</div>
+
+<script>
+// ── Exercise configs ────────────────────────────────────────────────
+const EXERCISES = {
+  pushup: {
+    name: 'Push-Up',
+    angleJoints: ['LEFT_SHOULDER', 'LEFT_ELBOW', 'LEFT_WRIST'],
+    downAngle: 90,   // arm bent = down
+    upAngle:   155,  // arm straight = up
+    label: 'Elbow angle',
+  },
+  squat: {
+    name: 'Squat',
+    angleJoints: ['LEFT_HIP', 'LEFT_KNEE', 'LEFT_ANKLE'],
+    downAngle: 90,
+    upAngle:   160,
+    label: 'Knee angle',
+  },
+  curl: {
+    name: 'Bicep Curl',
+    angleJoints: ['LEFT_SHOULDER', 'LEFT_ELBOW', 'LEFT_WRIST'],
+    downAngle: 155,  // arm down = start
+    upAngle:   50,   // arm curled = up
+    label: 'Elbow angle',
+    inverted: true,  // "down" is straight arm, "up" is bent
+  },
+};
+
+const LANDMARK_IDX = {
+  LEFT_SHOULDER: 11, LEFT_ELBOW: 13, LEFT_WRIST: 15,
+  RIGHT_SHOULDER: 12, RIGHT_ELBOW: 14, RIGHT_WRIST: 16,
+  LEFT_HIP: 23, LEFT_KNEE: 25, LEFT_ANKLE: 27,
+  RIGHT_HIP: 24, RIGHT_KNEE: 26, RIGHT_ANKLE: 28,
+};
+
+// ── State ───────────────────────────────────────────────────────────
+let currentEx   = 'pushup';
+let reps        = 0;
+let sets        = 0;
+let phase       = 'up';     // 'up' | 'down'
+let isRunning   = false;
+let sessionStart = 0;
+let timerInterval = null;
+let poseReady   = false;
+let detectionLost = false;
+let lostTimer   = null;
+
+// ── UI refs ─────────────────────────────────────────────────────────
+const videoEl    = document.getElementById('input-video');
+const canvasEl   = document.getElementById('output-canvas');
+const ctx        = canvasEl.getContext('2d');
+const repNumber  = document.getElementById('rep-number');
+const phaseBadge = document.getElementById('phase-badge');
+const angleVal   = document.getElementById('angle-val');
+const angleDisp  = document.getElementById('angle-display');
+const statusBar  = document.getElementById('status-bar');
+const detectDot  = document.getElementById('detect-dot');
+const ctrlReps   = document.getElementById('ctrl-reps');
+const ctrlSets   = document.getElementById('ctrl-sets');
+const ctrlTime   = document.getElementById('ctrl-time');
+
+// ── Exercise selection ───────────────────────────────────────────────
+document.querySelectorAll('.ex-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.ex-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    currentEx = pill.dataset.ex;
+    angleDisp.querySelector('div:last-child').textContent = EXERCISES[currentEx].label;
+  });
+});
+
+// ── Start camera ────────────────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', startSession);
+
+async function startSession() {
+  document.getElementById('start-screen').hidden = true;
+  document.getElementById('controls').hidden = false;
+  isRunning = true;
+  reps = 0; sets = 0; phase = 'up';
+  sessionStart = Date.now();
+  updateUI();
+  startTimer();
+  await initCamera();
+}
+
+// ── Timer ────────────────────────────────────────────────────────────
+function startTimer() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (!isRunning) return;
+    const s = Math.floor((Date.now() - sessionStart) / 1000);
+    ctrlTime.textContent = `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+  }, 500);
+}
+
+// ── Angle calculator ─────────────────────────────────────────────────
+function calcAngle(a, b, c) {
+  const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+  let angle = Math.abs(radians * 180 / Math.PI);
+  if (angle > 180) angle = 360 - angle;
+  return angle;
+}
+
+function getAngle(landmarks, ex) {
+  const cfg = EXERCISES[ex];
+  const [nameA, nameB, nameC] = cfg.angleJoints;
+
+  // Try left side first; if visibility low, use right
+  const idxA = LANDMARK_IDX[nameA], idxB = LANDMARK_IDX[nameB], idxC = LANDMARK_IDX[nameC];
+  const rA = nameA.replace('LEFT','RIGHT'), rB = nameB.replace('LEFT','RIGHT'), rC = nameC.replace('LEFT','RIGHT');
+  const ridxA = LANDMARK_IDX[rA], ridxB = LANDMARK_IDX[rB], ridxC = LANDMARK_IDX[rC];
+
+  const lvis = (landmarks[idxA]?.visibility || 0) + (landmarks[idxB]?.visibility || 0) + (landmarks[idxC]?.visibility || 0);
+  const rvis = (landmarks[ridxA]?.visibility || 0) + (landmarks[ridxB]?.visibility || 0) + (landmarks[ridxC]?.visibility || 0);
+
+  const best = lvis >= rvis
+    ? [landmarks[idxA], landmarks[idxB], landmarks[idxC]]
+    : [landmarks[ridxA], landmarks[ridxB], landmarks[ridxC]];
+
+  const vis = Math.min(...best.map(l => l?.visibility || 0));
+  if (vis < 0.4) return null;
+
+  return calcAngle(best[0], best[1], best[2]);
+}
+
+// ── Rep counter logic ─────────────────────────────────────────────────
+function countRep(angle) {
+  if (angle === null) return;
+  const cfg = EXERCISES[currentEx];
+  const { downAngle, upAngle, inverted } = cfg;
+
+  if (!inverted) {
+    // Normal: down = small angle, up = large angle
+    if (angle < downAngle && phase === 'up') {
+      phase = 'down';
+      updatePhase();
+    } else if (angle > upAngle && phase === 'down') {
+      phase = 'up';
+      reps++;
+      popRep();
+      updateUI();
+    }
+  } else {
+    // Inverted: down = large angle, up = small angle
+    if (angle > downAngle && phase === 'up') {
+      phase = 'down';
+      updatePhase();
+    } else if (angle < upAngle && phase === 'down') {
+      phase = 'up';
+      reps++;
+      popRep();
+      updateUI();
+    }
+  }
+}
+
+function updatePhase() {
+  phaseBadge.textContent = phase === 'down' ? '▼ Down' : '▲ Up';
+  phaseBadge.className = `${phase}`;
+}
+
+function popRep() {
+  repNumber.classList.add('pop');
+  setTimeout(() => repNumber.classList.remove('pop'), 150);
+}
+
+function updateUI() {
+  repNumber.textContent = reps;
+  ctrlReps.textContent  = reps;
+  ctrlSets.textContent  = sets;
+}
+
+// ── MediaPipe Pose setup ─────────────────────────────────────────────
+let pose, camera;
+
+async function initCamera() {
+  statusBar.textContent = 'Loading pose model…';
+
+  pose = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`
+  });
+
+  pose.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    enableSegmentation: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
+
+  pose.onResults(onPoseResults);
+
+  try {
+    await pose.initialize();
+    poseReady = true;
+    statusBar.textContent = '';
+
+    camera = new Camera(videoEl, {
+      onFrame: async () => {
+        if (!isRunning) return;
+        canvasEl.width  = videoEl.videoWidth  || canvasEl.offsetWidth;
+        canvasEl.height = videoEl.videoHeight || canvasEl.offsetHeight;
+        await pose.send({ image: videoEl });
+      },
+      width: 640, height: 480,
+    });
+    camera.start();
+  } catch(e) {
+    statusBar.textContent = 'Camera error: ' + e.message;
+  }
+}
+
+// ── Draw pose results ─────────────────────────────────────────────────
+function onPoseResults(results) {
+  ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+  if (!results.poseLandmarks || results.poseLandmarks.length === 0) {
+    markLost();
+    return;
+  }
+
+  markActive();
+
+  // Draw skeleton
+  drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {
+    color: 'rgba(0,230,118,0.4)', lineWidth: 2
+  });
+  drawLandmarks(ctx, results.poseLandmarks, {
+    color: 'rgba(0,230,118,0.8)',
+    fillColor: 'rgba(0,0,0,0.4)',
+    radius: 4,
+    lineWidth: 1,
+  });
+
+  // Calculate and display angle
+  const angle = getAngle(results.poseLandmarks, currentEx);
+  if (angle !== null) {
+    angleVal.textContent = Math.round(angle) + '°';
+    countRep(angle);
+  } else {
+    angleVal.textContent = '—°';
+  }
+
+  updatePhase();
+}
+
+function markActive() {
+  detectDot.className = 'active';
+  clearTimeout(lostTimer);
+  detectionLost = false;
+}
+
+function markLost() {
+  if (!detectionLost) {
+    lostTimer = setTimeout(() => {
+      detectDot.className = 'lost';
+      detectionLost = true;
+      phaseBadge.textContent = 'No body detected';
+      phaseBadge.className = '';
+    }, 1000);
+  }
+}
+
+// ── Reset / Stop ─────────────────────────────────────────────────────
+document.getElementById('reset-btn').addEventListener('click', () => {
+  reps = 0; sets++;
+  phase = 'up'; updatePhase();
+  updateUI();
+});
+
+document.getElementById('stop-btn').addEventListener('click', stopSession);
+
+function stopSession() {
+  isRunning = false;
+  clearInterval(timerInterval);
+  if (camera) camera.stop();
+
+  // Show summary
+  const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+  document.getElementById('sum-reps').textContent = reps;
+  document.getElementById('sum-sets').textContent = sets + (reps > 0 ? 1 : 0);
+  document.getElementById('sum-time').textContent =
+    elapsed >= 60 ? `${Math.floor(elapsed/60)}m${elapsed%60}s` : `${elapsed}s`;
+  document.getElementById('summary-modal').classList.add('open');
+}
+
+document.getElementById('sum-restart').addEventListener('click', () => {
+  document.getElementById('summary-modal').classList.remove('open');
+  sets++;
+  reps = 0; phase = 'up';
+  isRunning = true;
+  sessionStart = Date.now();
+  updateUI();
+  if (camera) camera.start();
+  startTimer();
+});
+
+document.getElementById('sum-done').addEventListener('click', () => {
+  document.getElementById('summary-modal').classList.remove('open');
+  document.getElementById('controls').hidden = true;
+  document.getElementById('start-screen').hidden = false;
+  ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+});
+</script>
+
+</body></html>
